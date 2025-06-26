@@ -51,10 +51,51 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
   }
 
   Future<void> _checkServerConnection() async {
+    print('Checking server connection...');
     final isConnected = await EmergencyService.checkServerHealth();
+    print('Server connection result: $isConnected');
     setState(() {
       _isConnected = isConnected;
     });
+    
+    if (!isConnected) {
+      _showConnectionHelp();
+    }
+  }
+
+  void _showConnectionHelp() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.wifi_off, color: Colors.red, size: 48),
+        title: const Text('Connection Failed'),
+        content: const Text(
+          '⚠️ Cannot connect to server\n\n'
+          'Check these steps:\n\n'
+          '1. Backend server running?\n'
+          '   → Run: npm run dev\n\n'
+          '2. Same WiFi network?\n'
+          '   → Phone and computer connected\n\n'
+          '3. Firewall blocking port 3000?\n'
+          '   → Check Windows Defender\n\n'
+          '4. Correct IP address?\n'
+          '   → Currently: 192.168.254.112:3000'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _checkServerConnection();
+            },
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _checkLocationServices() async {
@@ -458,6 +499,65 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
                                         ),
                                         child: const Text(
                                           'Enable',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Server Connection:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _isConnected ? Colors.green : Colors.red,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      _isConnected ? 'Connected' : 'Failed',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                  if (!_isConnected) ...[
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: _checkServerConnection,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange,
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
+                                        child: const Text(
+                                          'Retry',
                                           style: TextStyle(
                                             color: Colors.white,
                                             fontSize: 10,

@@ -3,6 +3,7 @@ const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
 const { v4: uuidv4 } = require('uuid');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -54,8 +55,16 @@ io.on('connection', (socket) => {
   });
 });
 
-// Routes
+// Serve static files for admin dashboard
+app.use('/admin', express.static(path.join(__dirname, '../admin_dashboard')));
+
+// Redirect root to admin dashboard
 app.get('/', (req, res) => {
+  res.redirect('/admin');
+});
+
+// API routes
+app.get('/api', (req, res) => {
   res.json({ 
     message: 'RHS Emergency Alert System',
     status: 'active',
@@ -227,8 +236,12 @@ app.get('/api/health', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚨 RHS Emergency Alert Backend running on port ${PORT}`);
-  console.log(`📍 API URL: http://localhost:${PORT}`);
+  console.log(`📱 Mobile URL: http://YOUR_IP_ADDRESS:${PORT}`);
+  console.log(`💻 Local URL: http://localhost:${PORT}`);
   console.log(`👨‍⚕️ Admin Login: rhs_clinic / clinic2024`);
+  console.log(`\n📋 To find your IP address:`);
+  console.log(`   Windows: ipconfig`);
+  console.log(`   Mac/Linux: ifconfig`);
 });
