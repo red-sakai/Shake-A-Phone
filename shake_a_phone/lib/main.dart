@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'services/emergency_service.dart';
+import 'services/location_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -37,25 +40,125 @@ class EmergencyHomePage extends StatefulWidget {
 
 class _EmergencyHomePageState extends State<EmergencyHomePage> {
   bool _isAlertActive = false;
-  bool _isConnected = true;
+  bool _isConnected = false;
+  bool _locationEnabled = false;
 
-  void _sendEmergencyAlert() {
+  @override
+  void initState() {
+    super.initState();
+    _checkServerConnection();
+    _checkLocationServices();
+  }
+
+  Future<void> _checkServerConnection() async {
+    final isConnected = await EmergencyService.checkServerHealth();
+    setState(() {
+      _isConnected = isConnected;
+    });
+  }
+
+  Future<void> _checkLocationServices() async {
+    final hasPermission = await LocationService.requestLocationPermission();
+    setState(() {
+      _locationEnabled = hasPermission;
+    });
+  }
+
+  Future<void> _sendEmergencyAlert() async {
     setState(() {
       _isAlertActive = true;
     });
 
-    // TODO: Implement actual emergency alert logic
-    // - Send location to admin
-    // - Trigger emergency notification
-
-    // Simulate alert duration
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _isAlertActive = false;
-        });
+    try {
+      if (!_locationEnabled) {
+        await _checkLocationServices();
+        if (!_locationEnabled) {
+          _showErrorDialog('Location permission required for emergency alerts.');
+          return;
+        }
       }
-    });
+
+      Position? location = await LocationService.getCurrentLocation();
+      
+      if (location == null) {
+        _showErrorDialog('Unable to get your location. Please enable GPS and try again.');
+        return;
+      }
+
+      final result = await EmergencyService.sendEmergencyAlert(
+        location: location,
+        studentName: 'RHS Student',
+        alertType: 'emergency',
+      );
+
+      if (result['success']) {
+        _showSuccessDialog('🚨 Emergency alert sent!\n\nThe school clinic has been notified of your location and will respond immediately.');
+      } else {
+        _showErrorDialog('Failed to send alert: ${result['error']}');
+      }
+    } catch (e) {
+      _showErrorDialog('Error: $e');
+    } finally {
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _isAlertActive = false;
+          });
+        }
+      });
+    }
+  }
+
+  void _showSuccessDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.check_circle, color: Colors.green, size: 48),
+        title: const Text('Alert Sent Successfully'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(String error) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.error, color: Colors.red, size: 48),
+        title: const Text('Error'),
+        content: Text(error),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _requestLocationPermission() async {
+    try {
+      // Force permission request
+      LocationPermission permission = await Geolocator.requestPermission();
+      
+      final hasPermission = await LocationService.requestLocationPermission();
+      await _checkLocationServices();
+      
+      if (hasPermission) {
+        _showSuccessDialog('✅ Location permission granted!\n\nYou can now send emergency alerts.');
+      } else {
+        _showErrorDialog('❌ Location permission denied.\n\nPlease manually enable location:\n\n1. Go to Settings\n2. Apps → RHS Emergency Alert\n3. Permissions → Location\n4. Select "Allow only while using the app"');
+      }
+    } catch (e) {
+      _showErrorDialog('Error requesting permission: $e');
+    }
   }
 
   @override
@@ -320,23 +423,51 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
                                   color: Colors.black,
                                 ),
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Text(
-                                  'Enabled',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _locationEnabled ? Colors.green : Colors.red,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      _locationEnabled ? 'Enabled' : 'Disabled',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  if (!_locationEnabled) ...[
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: _requestLocationPermission,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue,
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
+                                        child: const Text(
+                                          'Enable',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ],
                           ),
