@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'services/emergency_service.dart';
 import 'services/location_service.dart';
+import 'services/shake_detector.dart';
+import 'services/auth_service.dart';
+import 'pages/landing_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -26,7 +30,7 @@ class MyApp extends StatelessWidget {
           elevation: 4,
         ),
       ),
-      home: const EmergencyHomePage(),
+      home: const LandingPage(), // Always start with landing page
     );
   }
 }
@@ -38,16 +42,95 @@ class EmergencyHomePage extends StatefulWidget {
   State<EmergencyHomePage> createState() => _EmergencyHomePageState();
 }
 
-class _EmergencyHomePageState extends State<EmergencyHomePage> {
+class _EmergencyHomePageState extends State<EmergencyHomePage> with WidgetsBindingObserver {
   bool _isAlertActive = false;
   bool _isConnected = false;
   bool _locationEnabled = false;
+  bool _shakeEnabled = true;
+  final ShakeDetector _shakeDetector = ShakeDetector();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkServerConnection();
     _checkLocationServices();
+    _startShakeDetection();
+    _enableWakelock();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _shakeDetector.dispose();
+    WakelockPlus.disable();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Keep shake detection active even when app is in background
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _startShakeDetection();
+        break;
+      case AppLifecycleState.paused:
+        // Keep listening for shakes in background
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+        break;
+    }
+  }
+
+  void _startShakeDetection() {
+    if (_shakeEnabled) {
+      _shakeDetector.startListening(onShake: () {
+        print('Shake detected - triggering emergency alert!');
+        _handleShakeEmergency();
+      });
+    }
+  }
+
+  void _enableWakelock() {
+    // Keep screen awake to ensure shake detection works
+    WakelockPlus.enable();
+  }
+
+  void _handleShakeEmergency() {
+    if (_isAlertActive) return; // Prevent multiple simultaneous alerts
+    
+    // Show immediate feedback
+    _showShakeDetectedDialog();
+    
+    // Trigger emergency alert
+    _sendEmergencyAlert(fromShake: true);
+  }
+
+  void _showShakeDetectedDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.vibration, color: Colors.orange, size: 48),
+        title: const Text('Shake Detected!'),
+        content: const Text('📱 Emergency shake detected!\nSending alert automatically...'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    
+    // Auto-close after 3 seconds
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    });
   }
 
   Future<void> _checkServerConnection() async {
@@ -73,15 +156,22 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
           '⚠️ Cannot connect to server\n\n'
           'Check these steps:\n\n'
           '1. Backend server running?\n'
-          '   → Run: npm run dev\n\n'
+          '   → Run: node server.js\n\n'
           '2. Same WiFi network?\n'
           '   → Phone and computer connected\n\n'
           '3. Firewall blocking port 3000?\n'
           '   → Check Windows Defender\n\n'
           '4. Correct IP address?\n'
-          '   → Currently: 192.168.254.112:3000'
+          '   → Open emergency_service.dart and update _baseUrl with your computer\'s IP address'
         ),
         actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _runConnectionDiagnostics();
+            },
+            child: const Text('Diagnose'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('OK'),
@@ -97,6 +187,63 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
       ),
     );
   }
+  
+  Future<void> _runConnectionDiagnostics() async {
+    setState(() {
+      _isAlertActive = true;
+    });
+    
+    try {
+      final diagnostics = await EmergencyService.diagnoseConnection();
+      
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Connection Diagnostics'),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Internet connection: ${diagnostics['internetConnected'] ? '✓' : '✗'}'),
+                  const SizedBox(height: 12),
+                  Text('Main server (${diagnostics['mainIp']['url']}): '
+                      '${diagnostics['mainIp']['status'] == 200 ? '✓' : '✗'}'),
+                  if (diagnostics['mainIp']['error'] != null)
+                    Text('Error: ${diagnostics['mainIp']['error']}',
+                      style: const TextStyle(color: Colors.red, fontSize: 12)),
+                  const SizedBox(height: 16),
+                  const Text('Recommendation:'),
+                  const SizedBox(height: 8),
+                  const Text('1. Check that server.js is running\n'
+                            '2. Update the IP address in emergency_service.dart\n'
+                            '3. Ensure phone and server are on same WiFi',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _showErrorDialog('Diagnostics error: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAlertActive = false;
+        });
+      }
+    }
+  }
 
   Future<void> _checkLocationServices() async {
     final hasPermission = await LocationService.requestLocationPermission();
@@ -105,7 +252,7 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
     });
   }
 
-  Future<void> _sendEmergencyAlert() async {
+  Future<void> _sendEmergencyAlert({bool fromShake = false}) async {
     setState(() {
       _isAlertActive = true;
     });
@@ -126,14 +273,16 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
         return;
       }
 
+      final alertType = fromShake ? 'shake_emergency' : 'emergency';
       final result = await EmergencyService.sendEmergencyAlert(
         location: location,
         studentName: 'RHS Student',
-        alertType: 'emergency',
+        alertType: alertType,
       );
 
       if (result['success']) {
-        _showSuccessDialog('🚨 Emergency alert sent!\n\nThe school clinic has been notified of your location and will respond immediately.');
+        final alertMethod = fromShake ? 'shake detection' : 'button tap';
+        _showSuccessDialog('🚨 Emergency alert sent via $alertMethod!\n\nThe school clinic has been notified of your location and will respond immediately.');
       } else {
         _showErrorDialog('Failed to send alert: ${result['error']}');
       }
@@ -202,6 +351,20 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
     }
   }
 
+  void _toggleShakeDetection() {
+    setState(() {
+      _shakeEnabled = !_shakeEnabled;
+    });
+    
+    if (_shakeEnabled) {
+      _startShakeDetection();
+      _showSuccessDialog('✅ Shake detection enabled!\n\nShake your phone vigorously to send emergency alerts.');
+    } else {
+      _shakeDetector.stopListening();
+      _showSuccessDialog('❌ Shake detection disabled.\n\nOnly the emergency button will work.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -247,6 +410,26 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
                 ),
               ],
             ),
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'logout') {
+                _showLogoutDialog();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    const Icon(Icons.logout, color: Colors.red),
+                    const SizedBox(width: 8),
+                    Text('Logout (${AuthService.currentUser})'),
+                  ],
+                ),
+              ),
+            ],
+            icon: const Icon(Icons.account_circle),
           ),
         ],
       ),
@@ -443,7 +626,7 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: const Text(
-                                  'High',
+                                  'Low',  // Changed from 'High' to 'Low'
                                   style: TextStyle(
                                     color: Colors.black,
                                     fontSize: 12,
@@ -571,6 +754,63 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
                               ),
                             ],
                           ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Shake Detection:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.black,
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _shakeEnabled ? Colors.green : Colors.grey,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      _shakeEnabled ? 'Active' : 'Disabled',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: _toggleShakeDetection,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _shakeEnabled ? Colors.red : Colors.green,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Text(
+                                        _shakeEnabled ? 'Disable' : 'Enable',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -580,6 +820,38 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.logout, color: Colors.orange, size: 48),
+        title: const Text('Logout'),
+        content: Text('Are you sure you want to logout, ${AuthService.currentUser}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              AuthService.logout();
+              Navigator.pop(context);
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const LandingPage()),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Logout'),
+          ),
+        ],
       ),
     );
   }

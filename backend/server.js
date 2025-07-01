@@ -76,12 +76,12 @@ app.get('/api', (req, res) => {
 // Send emergency alert
 app.post('/api/emergency-alert', (req, res) => {
   try {
-    const { location, studentInfo, alertType = 'emergency' } = req.body;
+    const { location, studentName, alertType = 'emergency' } = req.body;
     
     if (!location || !location.latitude || !location.longitude) {
       return res.status(400).json({
         success: false,
-        message: 'Location data is required'
+        error: 'Location data is required'
       });
     }
     
@@ -91,9 +91,14 @@ app.post('/api/emergency-alert', (req, res) => {
       location: {
         latitude: location.latitude,
         longitude: location.longitude,
-        accuracy: location.accuracy || 0
+        accuracy: location.accuracy || 0,
+        altitude: location.altitude,
+        speed: location.speed,
+        heading: location.heading
       },
-      studentInfo: studentInfo || { name: 'Anonymous Student' },
+      studentInfo: {
+        name: studentName || 'Anonymous Student'
+      },
       alertType,
       status: 'active',
       responseTime: null,
@@ -105,7 +110,8 @@ app.post('/api/emergency-alert', (req, res) => {
     // Broadcast to all connected admins
     io.emit('emergency-alert', alert);
     
-    console.log(`Emergency alert received: ${alert.id} at ${alert.location.latitude}, ${alert.location.longitude}`);
+    console.log(`Emergency alert received: ${alert.id} from ${studentName || 'Anonymous'} at ${alert.location.latitude}, ${alert.location.longitude}`);
+    console.log(`Alert type: ${alertType}`);
     
     res.status(201).json({
       success: true,
@@ -118,9 +124,15 @@ app.post('/api/emergency-alert', (req, res) => {
     console.error('Error processing emergency alert:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to process emergency alert'
+      error: error.message || 'Failed to process emergency alert'
     });
   }
+});
+
+// Add this additional endpoint for compatibility with different mobile app implementations
+app.post('/api/alerts/create', (req, res) => {
+  // Forward to the main emergency alert endpoint
+  app.handle(req, res, req.url = '/api/emergency-alert');
 });
 
 // Get all alerts (for admin dashboard)
