@@ -368,6 +368,7 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> with WidgetsBindi
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: _buildProfileDrawer(),
       appBar: AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -410,26 +411,6 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> with WidgetsBindi
                 ),
               ],
             ),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'logout') {
-                _showLogoutDialog();
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    const Icon(Icons.logout, color: Colors.red),
-                    const SizedBox(width: 8),
-                    Text('Logout (${AuthService.currentUser})'),
-                  ],
-                ),
-              ),
-            ],
-            icon: const Icon(Icons.account_circle),
           ),
         ],
       ),
@@ -820,6 +801,113 @@ class _EmergencyHomePageState extends State<EmergencyHomePage> with WidgetsBindi
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildProfileDrawer() {
+    return Drawer(
+      child: Column(
+        children: [
+          UserAccountsDrawerHeader(
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFD700),
+            ),
+            accountName: Text(
+              AuthService.currentUser ?? 'User',
+              style: const TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            accountEmail: const Text(
+              'RHS Emergency User',
+              style: TextStyle(
+                color: Colors.black87,
+              ),
+            ),
+            currentAccountPicture: CircleAvatar(
+              backgroundColor: Colors.white,
+              child: Icon(
+                Icons.person,
+                color: const Color(0xFFFFD700),
+                size: 40,
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.person),
+            title: const Text('Profile Settings'),
+            onTap: () {
+              Navigator.pop(context); // Close drawer
+              // TODO: Navigate to profile settings page
+              _showFeatureComingSoonDialog('Profile Settings');
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.notifications),
+            title: const Text('Notification Preferences'),
+            onTap: () {
+              Navigator.pop(context); // Close drawer
+              // TODO: Navigate to notification settings page
+              _showFeatureComingSoonDialog('Notification Preferences');
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.security),
+            title: const Text('Security Settings'),
+            onTap: () {
+              Navigator.pop(context); // Close drawer
+              // TODO: Navigate to security settings page
+              _showFeatureComingSoonDialog('Security Settings');
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.help),
+            title: const Text('Help & Support'),
+            onTap: () {
+              Navigator.pop(context); // Close drawer
+              // TODO: Navigate to help page
+              _showFeatureComingSoonDialog('Help & Support');
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('Logout', style: TextStyle(color: Colors.red)),
+            onTap: () {
+              Navigator.pop(context); // Close drawer
+              _showLogoutDialog();
+            },
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.all(16),
+            alignment: Alignment.center,
+            child: const Text(
+              '© 2024 RHS Emergency System',
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFeatureComingSoonDialog(String featureName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.engineering, color: Color(0xFFFFD700), size: 48),
+        title: const Text('Coming Soon'),
+        content: Text('The $featureName feature is coming soon!'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }

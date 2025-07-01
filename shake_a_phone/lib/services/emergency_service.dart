@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:geolocator/geolocator.dart';
 import 'dart:io';
+import 'auth_service.dart';
 
 class EmergencyService {
   // Update this to match your computer's IP address on your local network
-  static const String _baseUrl = 'http://192.168.224.54:3000'; // CHANGE THIS IP ADDRESS
+  static const String baseUrl = 'http://192.168.1.1:3000'; // CHANGE THIS IP ADDRESS
   
   // Alternative IP addresses to try if the main one fails
   static const List<String> _fallbackIps = [
@@ -18,11 +19,11 @@ class EmergencyService {
     try {
       // Try the main IP address first
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/health'),
+        Uri.parse('$baseUrl/api/health'),
       ).timeout(const Duration(seconds: 3));
       
       if (response.statusCode == 200) {
-        print('Successfully connected to server at $_baseUrl');
+        print('Successfully connected to server at $baseUrl');
         return true;
       }
       
@@ -57,9 +58,9 @@ class EmergencyService {
     required String alertType,
   }) async {
     try {
-      final url = Uri.parse('$_baseUrl/api/emergency-alert');
+      final url = Uri.parse('$baseUrl/api/emergency-alert');
       
-      print('Sending emergency alert to: $_baseUrl');
+      print('Sending emergency alert to: $baseUrl');
       print('Location data: ${location.latitude}, ${location.longitude}');
       
       final response = await http.post(
@@ -75,6 +76,7 @@ class EmergencyService {
             'heading': location.heading,
           },
           'studentName': studentName,
+          'userId': AuthService.currentUserId,  // Include user ID to fetch medical profile
           'alertType': alertType,
         }),
       ).timeout(const Duration(seconds: 10));
@@ -107,7 +109,7 @@ class EmergencyService {
   // Method to diagnose connection issues
   static Future<Map<String, dynamic>> diagnoseConnection() async {
     Map<String, dynamic> results = {
-      'mainIp': {'url': _baseUrl, 'status': 'unknown', 'error': null},
+      'mainIp': {'url': baseUrl, 'status': 'unknown', 'error': null},
       'fallbackIps': [],
       'internetConnected': false,
     };
@@ -126,7 +128,7 @@ class EmergencyService {
     // Try main IP
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/health'),
+        Uri.parse('$baseUrl/api/health'),
       ).timeout(const Duration(seconds: 3));
       
       results['mainIp']['status'] = response.statusCode;

@@ -4,6 +4,9 @@ const http = require('http');
 const socketIo = require('socket.io');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const mongoose = require('mongoose');
+const User = require('./models/user');
+const MedicalProfile = require('./models/medical_profile');
 require('dotenv').config();
 
 const app = express();
@@ -32,6 +35,14 @@ const defaultAdmin = {
   name: 'RHS Clinic Admin',
   role: 'admin'
 };
+
+// Connect to MongoDB
+mongoose.connect('mongodb://localhost:27017/rhs_emergency', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log('📊 MongoDB connected'))
+.catch(err => console.error('MongoDB connection error:', err));
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
@@ -73,16 +84,117 @@ app.get('/api', (req, res) => {
   });
 });
 
-// Send emergency alert
-app.post('/api/emergency-alert', (req, res) => {
+// Create or update medical profile
+app.post('/api/medical-profile', async (req, res) => {
   try {
-    const { location, studentName, alertType = 'emergency' } = req.body;
+    const { userId, bloodType, allergies, conditions, emergencyContacts, medications, specialInstructions } = req.body;
+    
+    // Find existing profile or create new one
+    let profile = await MedicalProfile.findOne({ userId });
+    
+    if (profile) {
+      // Update existing profile
+      profile.bloodType = bloodType || profile.bloodType;
+      profile.allergies = allergies || profile.allergies;
+      profile.conditions = conditions || profile.conditions;
+      profile.emergencyContacts = emergencyContacts || profile.emergencyContacts;
+      profile.medications = medications || profile.medications;
+      profile.specialInstructions = specialInstructions || profile.specialInstructions;
+      profile.lastUpdated = Date.now();
+      
+      await profile.save();
+    } else {
+      // Create new profile
+      profile = new MedicalProfile({
+        userId,
+        bloodType,
+        allergies,
+        conditions,
+        emergencyContacts,
+        medications,
+        specialInstructions
+      });
+      
+      await profile.save();
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'Medical profile updated successfully',
+      profile
+    });
+    
+  } catch (error) {
+    console.error('Error updating medical profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update medical profile',
+      error: error.message
+    });
+  }
+});
+
+// Get medical profile by user ID
+app.get('/api/medical-profile/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const profile = await MedicalProfile.findOne({ userId }).populate('userId', 'username name');
+    
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Medical profile not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      profile
+    });
+    
+  } catch (error) {
+    console.error('Error fetching medical profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch medical profile',
+      error: error.message
+    });
+  }
+});
+
+// Send emergency alert
+app.post('/api/emergency-alert', async (req, res) => {
+  try {
+    const { location, studentName, userId, alertType = 'emergency' } = req.body;
     
     if (!location || !location.latitude || !location.longitude) {
       return res.status(400).json({
         success: false,
         error: 'Location data is required'
       });
+    }
+    
+    // Fetch medical profile if userId is provided
+    let medicalData = null;
+    if (userId) {
+      try {
+        const profile = await MedicalProfile.findOne({ userId });
+        if (profile) {
+          medicalData = {
+            bloodType: profile.bloodType,
+            allergies: profile.allergies,
+            conditions: profile.conditions.map(c => ({
+              name: c.name,
+              severity: c.severity,
+              emergencyInstructions: c.emergencyInstructions
+            })),
+            emergencyContacts: profile.emergencyContacts
+          };
+        }
+      } catch (err) {
+        console.warn('Could not fetch medical profile:', err);
+      }
     }
     
     const alert = {
@@ -97,7 +209,9 @@ app.post('/api/emergency-alert', (req, res) => {
         heading: location.heading
       },
       studentInfo: {
-        name: studentName || 'Anonymous Student'
+        name: studentName || 'Anonymous Student',
+        userId: userId || null,
+        medicalProfile: medicalData
       },
       alertType,
       status: 'active',
@@ -244,6 +358,91 @@ app.get('/api/health', (req, res) => {
     totalAlerts: emergencyAlerts.length,
     activeAlerts: emergencyAlerts.filter(alert => alert.status === 'active').length
   });
+});
+
+// Add user registration endpoint
+app.post('/api/register', async (req, res) => {
+  try {
+    const { username, password, name, email } = req.body;
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username already exists'
+      });
+    }
+    
+    // Create new user
+    const user = new User({
+      username,
+      password,
+      name,
+      email
+    });
+    
+    await user.save();
+    
+    res.status(201).json({
+      success: true,
+      message: 'User registered successfully'
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Registration failed',
+      error: error.message
+    });
+  }
+});
+
+// Update login endpoint
+app.post('/api/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    // Find user
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+    
+    // Check password
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+    
+    // Update last login
+    user.lastLogin = Date.now();
+    await user.save();
+    
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        username: user.username,
+        name: user.name,
+        role: user.role
+      },
+      token: 'user-token-' + Date.now() // Simple token for demo
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Login failed',
+      error: error.message
+    });
+  }
 });
 
 const PORT = process.env.PORT || 3000;

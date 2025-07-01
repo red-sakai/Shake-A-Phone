@@ -38,17 +38,21 @@ dependencies:
   wakelock_plus: ^1.2.8
   sensors_plus: ^6.0.1
   http: ^1.2.2
+  
+  # MongoDB and authentication related dependencies
+  mongo_dart: ^0.10.0   # Dart driver for MongoDB
+  json_annotation: ^4.8.1  # For JSON serialization
+  shared_preferences: ^2.2.1  # For storing user credentials locally
+  jwt_decoder: ^2.0.1   # For decoding JWT tokens
+  intl: ^0.18.1  # For date formatting
+  cached_network_image: ^3.3.0  # For caching images
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
   flutter_lints: ^3.0.0
+  build_runner: ^2.4.6  # For code generation
+  json_serializable: ^6.7.1  # For JSON serialization
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
