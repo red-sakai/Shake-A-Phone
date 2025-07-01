@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -13,9 +14,26 @@ class _RegisterPageState extends State<RegisterPage> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _fullNameController = TextEditingController();
+  final _dobController = TextEditingController();
+  final _studentIdController = TextEditingController();
+  final _emergencyContactController = TextEditingController();
+  final _medicalConditionsController = TextEditingController();
+  final _allergiesController = TextEditingController();
+  final _medicationsController = TextEditingController();
+  final _immunizationController = TextEditingController();
+  final _medicalDevicesController = TextEditingController();
+  
+  String _selectedGender = 'Prefer not to say';
+  String _selectedBloodType = 'Unknown';
+  
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  
+  // Dropdown items
+  final List<String> _genders = ['Male', 'Female', 'Prefer not to say'];
+  final List<String> _bloodTypes = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'];
 
   @override
   Widget build(BuildContext context) {
@@ -80,8 +98,11 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                   ),
                   
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 24),
                   
+                  // Section Headers
+                  _buildSectionHeader('Account Information'),
+
                   // Username Field
                   TextFormField(
                     controller: _usernameController,
@@ -164,7 +185,217 @@ class _RegisterPageState extends State<RegisterPage> {
                     },
                   ),
                   
+                  const SizedBox(height: 24),
+                  
+                  // Personal Information Section
+                  _buildSectionHeader('Personal Information'),
+                  
+                  // Full Name Field
+                  TextFormField(
+                    controller: _fullNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Full Name',
+                      prefixIcon: Icon(Icons.badge),
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter your full name',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your full name';
+                      }
+                      return null;
+                    },
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Date of Birth Field
+                  TextFormField(
+                    controller: _dobController,
+                    decoration: InputDecoration(
+                      labelText: 'Date of Birth',
+                      prefixIcon: const Icon(Icons.calendar_today),
+                      border: const OutlineInputBorder(),
+                      hintText: 'YYYY-MM-DD',
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.calendar_month),
+                        onPressed: () => _selectDate(context),
+                      ),
+                    ),
+                    readOnly: true,
+                    onTap: () => _selectDate(context),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Gender Dropdown
+                  DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(
+                      labelText: 'Gender',
+                      prefixIcon: Icon(Icons.people),
+                      border: OutlineInputBorder(),
+                    ),
+                    value: _selectedGender,
+                    items: _genders.map((gender) {
+                      return DropdownMenuItem(
+                        value: gender,
+                        child: Text(gender),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedGender = value!;
+                      });
+                    },
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Student ID Field
+                  TextFormField(
+                    controller: _studentIdController,
+                    decoration: const InputDecoration(
+                      labelText: 'Student ID',
+                      prefixIcon: Icon(Icons.assignment_ind),
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter your student ID or N/A',
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Medical Information Section
+                  _buildSectionHeader('Medical Information'),
+                  
+                  // Blood Type Dropdown
+                  DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(
+                      labelText: 'Blood Type',
+                      prefixIcon: Icon(Icons.bloodtype),
+                      border: OutlineInputBorder(),
+                    ),
+                    value: _selectedBloodType,
+                    items: _bloodTypes.map((type) {
+                      return DropdownMenuItem(
+                        value: type,
+                        child: Text(type),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedBloodType = value!;
+                      });
+                    },
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Emergency Contact Person
+                  TextFormField(
+                    controller: _emergencyContactController,
+                    decoration: const InputDecoration(
+                      labelText: 'Emergency Contact',
+                      prefixIcon: Icon(Icons.contact_phone),
+                      border: OutlineInputBorder(),
+                      hintText: 'Name, Relationship, Phone Number',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please provide an emergency contact';
+                      }
+                      return null;
+                    },
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Known Medical Conditions
+                  TextFormField(
+                    controller: _medicalConditionsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Medical Conditions',
+                      prefixIcon: Icon(Icons.medical_information),
+                      border: OutlineInputBorder(),
+                      hintText: 'e.g., asthma, diabetes, or N/A',
+                    ),
+                    maxLines: 2,
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Allergies
+                  TextFormField(
+                    controller: _allergiesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Allergies',
+                      prefixIcon: Icon(Icons.warning_amber),
+                      border: OutlineInputBorder(),
+                      hintText: 'Food, medication, environmental, or N/A',
+                    ),
+                    maxLines: 2,
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Current Medications
+                  TextFormField(
+                    controller: _medicationsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Current Medications',
+                      prefixIcon: Icon(Icons.medication),
+                      border: OutlineInputBorder(),
+                      hintText: 'Name, dosage, frequency, or N/A',
+                    ),
+                    maxLines: 2,
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Immunization History
+                  TextFormField(
+                    controller: _immunizationController,
+                    decoration: const InputDecoration(
+                      labelText: 'Immunization History',
+                      prefixIcon: Icon(Icons.health_and_safety),
+                      border: OutlineInputBorder(),
+                      hintText: 'Tetanus, MMR, etc. or N/A',
+                    ),
+                    maxLines: 2,
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Medical Devices
+                  TextFormField(
+                    controller: _medicalDevicesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Medical Devices',
+                      prefixIcon: Icon(Icons.devices),
+                      border: OutlineInputBorder(),
+                      hintText: 'e.g., pacemaker, insulin pump, or N/A',
+                    ),
+                    maxLines: 2,
+                  ),
+                  
                   const SizedBox(height: 32),
+                  
+                  // Data Usage Notice
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: const Text(
+                      'Your medical information will only be shared with emergency responders '
+                      'and medical staff in case of an emergency alert.',
+                      style: TextStyle(fontSize: 12, color: Colors.blue),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
                   
                   // Register Button
                   SizedBox(
@@ -238,6 +469,52 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFFFFD700),
+            ),
+          ),
+          const Divider(color: Color(0xFFFFD700), thickness: 2),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().subtract(const Duration(days: 365 * 15)),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFFFFD700),
+              onPrimary: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    
+    if (picked != null) {
+      setState(() {
+        _dobController.text = DateFormat('yyyy-MM-dd').format(picked);
+      });
+    }
+  }
+
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -248,10 +525,25 @@ class _RegisterPageState extends State<RegisterPage> {
     });
 
     try {
-      await AuthService.register(
+      // Create medical profile data
+      final medicalProfile = {
+        'fullName': _fullNameController.text,
+        'dateOfBirth': _dobController.text,
+        'gender': _selectedGender,
+        'bloodType': _selectedBloodType,
+        'studentId': _studentIdController.text,
+        'emergencyContact': _emergencyContactController.text,
+        'medicalConditions': _medicalConditionsController.text,
+        'allergies': _allergiesController.text,
+        'medications': _medicationsController.text,
+        'immunization': _immunizationController.text,
+        'medicalDevices': _medicalDevicesController.text,
+      };
+
+      await AuthService.registerWithMedicalProfile(
         _usernameController.text.trim(),
         _passwordController.text,
-        _confirmPasswordController.text,
+        medicalProfile,
       );
 
       if (mounted) {
@@ -277,7 +569,7 @@ class _RegisterPageState extends State<RegisterPage> {
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.check_circle, color: Colors.green, size: 48),
         title: const Text('Account Created'),
-        content: const Text('Your account has been created successfully! You can now log in.'),
+        content: const Text('Your account and medical profile have been created successfully! You can now log in.'),
         actions: [
           ElevatedButton(
             onPressed: () {
@@ -317,6 +609,15 @@ class _RegisterPageState extends State<RegisterPage> {
     _usernameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _fullNameController.dispose();
+    _dobController.dispose();
+    _studentIdController.dispose();
+    _emergencyContactController.dispose();
+    _medicalConditionsController.dispose();
+    _allergiesController.dispose();
+    _medicationsController.dispose();
+    _immunizationController.dispose();
+    _medicalDevicesController.dispose();
     super.dispose();
   }
 }

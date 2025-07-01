@@ -4,7 +4,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 
 class ShakeDetector {
   // Adjust these values to change shake sensitivity
-  static const double _shakeThreshold = 200.0; // Increased from 30.0 to 50.0 (less sensitive)
+  static const double _shakeThreshold = 65.5; // Increased from 30.0 to 50.0 (less sensitive)
   static const int _minShakeCount = 5;        // Increased from 3 to 5 (requires more shakes)
   static const Duration _shakeTimeout = Duration(milliseconds: 800); // Reduced window for shakes
   static const Duration _cooldownPeriod = Duration(seconds: 3); // Longer cooldown period
