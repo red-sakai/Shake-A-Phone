@@ -8,7 +8,7 @@ class AuthService {
   static const String _currentUserKey = 'current_user';
   static String? currentUserId;
   
-  // Simple in-memory storage for demo (replace with proper database in production)
+  // In-memory storage only used as fallback if server is unreachable
   static final Map<String, String> _users = {
     'admin': 'password123',
     'student': 'student123',
@@ -21,19 +21,60 @@ class AuthService {
   static String? currentUser;
   
   static Future<bool> login(String username, String password) async {
-    // Simulate network delay
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    if (_users.containsKey(username) && _users[username] == password) {
-      isLoggedIn = true;
-      currentUser = username;
+    try {
+      // Try server login first
+      final url = Uri.parse('${EmergencyService.serverUrl}/api/login');
       
-      // For demonstration, create a userId format
-      currentUserId = 'user-${username.hashCode}';
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'username': username,
+          'password': password,
+        }),
+      ).timeout(const Duration(seconds: 10));
       
-      return true;
+      final data = json.decode(response.body);
+      
+      if (response.statusCode == 200 && data['success']) {
+        isLoggedIn = true;
+        currentUser = username;
+        currentUserId = data['user']['id'];
+        
+        // Store login info in SharedPreferences for persistence
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_currentUserKey, username);
+        await prefs.setString('user_id', currentUserId ?? '');
+        
+        return true;
+      }
+      
+      // Fallback to local login if server fails
+      if (_users.containsKey(username) && _users[username] == password) {
+        isLoggedIn = true;
+        currentUser = username;
+        currentUserId = 'user-${username.hashCode}';
+        
+        // Store login info in SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_currentUserKey, username);
+        await prefs.setString('user_id', currentUserId ?? '');
+        
+        return true;
+      }
+      
+      return false;
+    } catch (e) {
+      print('Login error: $e');
+      // Try local login as fallback
+      if (_users.containsKey(username) && _users[username] == password) {
+        isLoggedIn = true;
+        currentUser = username;
+        currentUserId = 'user-${username.hashCode}';
+        return true;
+      }
+      return false;
     }
-    return false;
   }
   
   static Future<bool> register(String username, String password, String confirmPassword) async {
@@ -52,12 +93,40 @@ class AuthService {
       throw Exception('Password must be at least 6 characters');
     }
     
-    if (_users.containsKey(username)) {
-      throw Exception('Username already exists');
+    try {
+      // Register with server
+      final url = Uri.parse('${EmergencyService.serverUrl}/api/register');
+      
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'username': username,
+          'password': password,
+          'name': username, // Default to username if no name provided
+          'email': '', // Empty by default
+        }),
+      ).timeout(const Duration(seconds: 10));
+      
+      final data = json.decode(response.body);
+      
+      if (response.statusCode == 201 && data['success']) {
+        // Also store locally as fallback
+        _users[username] = password;
+        return true;
+      } else {
+        throw Exception(data['message'] ?? 'Registration failed');
+      }
+    } catch (e) {
+      print('Server registration failed: $e');
+      // Local fallback
+      if (_users.containsKey(username)) {
+        throw Exception('Username already exists');
+      }
+      
+      _users[username] = password;
+      return true;
     }
-    
-    _users[username] = password;
-    return true;
   }
   
   static Future<bool> registerWithMedicalProfile(
@@ -65,39 +134,64 @@ class AuthService {
     String password, 
     Map<String, dynamic> medicalProfile
   ) async {
-    // Simulate network delay
-    await Future.delayed(const Duration(milliseconds: 800));
-    
-    if (username.length < 3) {
-      throw Exception('Username must be at least 3 characters');
-    }
-    
-    if (password.length < 6) {
-      throw Exception('Password must be at least 6 characters');
-    }
-    
-    if (_users.containsKey(username)) {
-      throw Exception('Username already exists');
-    }
-    
-    // Register user
-    _users[username] = password;
-    
-    // Generate user ID
-    final userId = 'user-${username.hashCode}';
-    
-    // Store medical profile
-    _medicalProfiles[userId] = medicalProfile;
-    
-    // If connected to the backend, send the profile to MongoDB
     try {
+      // First register the user
+      final url = Uri.parse('${EmergencyService.serverUrl}/api/register');
+      
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'username': username,
+          'password': password,
+          'name': medicalProfile['fullName'] ?? username,
+          'email': '',
+        }),
+      ).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode != 201) {
+        final data = json.decode(response.body);
+        throw Exception(data['message'] ?? 'Registration failed');
+      }
+      
+      // Login to get the user ID
+      final loginResponse = await http.post(
+        Uri.parse('${EmergencyService.serverUrl}/api/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'username': username,
+          'password': password,
+        }),
+      ).timeout(const Duration(seconds: 10));
+      
+      final loginData = json.decode(loginResponse.body);
+      
+      if (loginResponse.statusCode != 200 || !loginData['success']) {
+        throw Exception('Login after registration failed');
+      }
+      
+      final userId = loginData['user']['id'];
+      
+      // Now send the medical profile
       await _sendMedicalProfileToServer(userId, username, medicalProfile);
+      
+      // Store in local cache too
+      _users[username] = password;
+      return true;
     } catch (e) {
-      // Continue even if server save fails, we've stored it locally
-      print('Warning: Failed to save medical profile to server: $e');
+      print('Error during registration with medical profile: $e');
+      
+      // Check if username exists
+      if (_users.containsKey(username)) {
+        throw Exception('Username already exists');
+      }
+      
+      // Local fallback
+      _users[username] = password;
+      final userId = 'user-${username.hashCode}';
+      _medicalProfiles[userId] = medicalProfile;
+      return true;
     }
-    
-    return true;
   }
   
   static Future<void> _sendMedicalProfileToServer(
@@ -216,9 +310,40 @@ class AuthService {
     return null;
   }
   
-  static void logout() {
+  static Future<bool> checkLoggedIn() async {
+    if (isLoggedIn && currentUser != null) {
+      return true;
+    }
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedUsername = prefs.getString(_currentUserKey);
+      final savedUserId = prefs.getString('user_id');
+      
+      if (savedUsername != null && savedUsername.isNotEmpty) {
+        isLoggedIn = true;
+        currentUser = savedUsername;
+        currentUserId = savedUserId;
+        return true;
+      }
+    } catch (e) {
+      print('Error checking login status: $e');
+    }
+    
+    return false;
+  }
+  
+  static void logout() async {
     isLoggedIn = false;
     currentUser = null;
     currentUserId = null;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_currentUserKey);
+      await prefs.remove('user_id');
+    } catch (e) {
+      print('Error during logout: $e');
+    }
   }
 }

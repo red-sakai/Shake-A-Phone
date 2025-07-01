@@ -50,15 +50,30 @@ const emergencyContactSchema = new mongoose.Schema({
 
 const medicalProfileSchema = new mongoose.Schema({
   userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    type: String,
     required: true,
     unique: true
+  },
+  fullName: {
+    type: String,
+    default: ''
+  },
+  dateOfBirth: {
+    type: String,
+    default: ''
+  },
+  gender: {
+    type: String,
+    default: 'Prefer not to say'
   },
   bloodType: {
     type: String,
     enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'],
     default: 'Unknown'
+  },
+  studentId: {
+    type: String,
+    default: ''
   },
   allergies: [{
     type: String,

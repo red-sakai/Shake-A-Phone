@@ -36,13 +36,25 @@ const defaultAdmin = {
   role: 'admin'
 };
 
-// Connect to MongoDB
+// Connect to MongoDB with better error handling and fallback
 mongoose.connect('mongodb://localhost:27017/rhs_emergency', {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
-.then(() => console.log('📊 MongoDB connected'))
-.catch(err => console.error('MongoDB connection error:', err));
+.then(() => {
+  console.log('📊 MongoDB connected');
+  global.useDatabase = true;
+})
+.catch(err => {
+  console.error('MongoDB connection error:', err);
+  console.log('\n🚨 WARNING: Running without database. Data will not persist!');
+  console.log('📋 To install MongoDB:');
+  console.log('   Windows: Download from mongodb.com');
+  console.log('   Mac: Run "brew install mongodb-community"');
+  console.log('   Linux: Run "sudo apt install mongodb"');
+  
+  global.useDatabase = false;
+});
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
@@ -365,8 +377,18 @@ app.post('/api/register', async (req, res) => {
   try {
     const { username, password, name, email } = req.body;
     
+    console.log(`Registration attempt for user: ${username}`);
+    
     // Check if user already exists
-    const existingUser = await User.findOne({ username });
+    let existingUser;
+    
+    try {
+      existingUser = await User.findOne({ username });
+    } catch (dbErr) {
+      console.error('Database error when checking existing user:', dbErr);
+      // Continue with in-memory check if DB isn't available
+    }
+    
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -375,21 +397,28 @@ app.post('/api/register', async (req, res) => {
     }
     
     // Create new user
-    const user = new User({
-      username,
-      password,
-      name,
-      email
-    });
-    
-    await user.save();
-    
-    res.status(201).json({
-      success: true,
-      message: 'User registered successfully'
-    });
-    
+    try {
+      const user = new User({
+        username,
+        password, // Will be hashed by the pre-save hook in the model
+        name: name || username,
+        email: email || '',
+      });
+      
+      await user.save();
+      
+      console.log(`User registered successfully: ${username}`);
+      
+      res.status(201).json({
+        success: true,
+        message: 'User registered successfully'
+      });
+    } catch (saveErr) {
+      console.error('Error saving user to database:', saveErr);
+      throw saveErr;
+    }
   } catch (error) {
+    console.error('Registration failed:', error);
     res.status(500).json({
       success: false,
       message: 'Registration failed',
@@ -398,13 +427,39 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// Update login endpoint
+// Update login endpoint with better error handling
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     
+    console.log(`Login attempt for user: ${username}`);
+    
     // Find user
-    const user = await User.findOne({ username });
+    let user;
+    try {
+      user = await User.findOne({ username });
+    } catch (dbErr) {
+      console.error('Database error when finding user:', dbErr);
+      // If DB isn't available, check if it's a default user
+      if (username === defaultAdmin.username && password === defaultAdmin.password) {
+        return res.json({
+          success: true,
+          user: {
+            id: defaultAdmin.id,
+            username: defaultAdmin.username,
+            name: defaultAdmin.name,
+            role: defaultAdmin.role
+          },
+          token: 'admin-token-' + Date.now()
+        });
+      }
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Database error during login'
+      });
+    }
+    
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -413,7 +468,17 @@ app.post('/api/login', async (req, res) => {
     }
     
     // Check password
-    const isMatch = await user.comparePassword(password);
+    let isMatch = false;
+    try {
+      isMatch = await user.comparePassword(password);
+    } catch (pwErr) {
+      console.error('Password comparison error:', pwErr);
+      return res.status(500).json({
+        success: false,
+        message: 'Error verifying password'
+      });
+    }
+    
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -424,6 +489,8 @@ app.post('/api/login', async (req, res) => {
     // Update last login
     user.lastLogin = Date.now();
     await user.save();
+    
+    console.log(`User logged in successfully: ${username}`);
     
     res.json({
       success: true,
@@ -437,11 +504,43 @@ app.post('/api/login', async (req, res) => {
     });
     
   } catch (error) {
+    console.error('Login failed:', error);
     res.status(500).json({
       success: false,
       message: 'Login failed',
       error: error.message
     });
+  }
+});
+
+// Add an admin API route to view users and profiles
+app.get('/api/admin/users', async (req, res) => {
+  // Simple API key check - replace with proper authentication in production
+  const apiKey = req.headers['x-api-key'];
+  if (apiKey !== 'admin-secret-key') {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  try {
+    const users = await User.find().select('-password'); // Exclude passwords
+    res.json({ success: true, users });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/admin/medical-profiles', async (req, res) => {
+  // Simple API key check - replace with proper authentication in production
+  const apiKey = req.headers['x-api-key'];
+  if (apiKey !== 'admin-secret-key') {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  try {
+    const profiles = await MedicalProfile.find();
+    res.json({ success: true, profiles });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

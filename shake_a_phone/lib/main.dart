@@ -7,7 +7,12 @@ import 'services/shake_detector.dart';
 import 'services/auth_service.dart';
 import 'pages/landing_page.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Check if user is already logged in
+  await AuthService.checkLoggedIn();
+  
   runApp(const MyApp());
 }
 
@@ -30,7 +35,7 @@ class MyApp extends StatelessWidget {
           elevation: 4,
         ),
       ),
-      home: const LandingPage(), // Always start with landing page
+      home: AuthService.isLoggedIn ? const EmergencyHomePage() : const LandingPage(),
     );
   }
 }
