@@ -32,7 +32,3 @@ A mobile emergency alert system for **Rizal High School** students — notify th
 2. **Install dependencies:**
   ```bash
   flutter pub get
-
-3. **Run the app:**
-  ```bash
-  flutter run
